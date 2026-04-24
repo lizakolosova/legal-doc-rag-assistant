@@ -1,8 +1,17 @@
+import enum
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from pydantic.fields import Field
 from pydantic import BaseModel
+from pydantic.fields import Field
+
+
+class DocumentStatus(str, enum.Enum):
+    pending = "pending"
+    processing = "processing"
+    ready = "ready"
+    failed = "failed"
+
 
 class DocumentUpload(BaseModel):
 
@@ -42,6 +51,8 @@ class EmbeddedChunk(BaseModel):
     text: str
     chunk_index: int
     page_number: int | None
+    source_file: str | None = None
+    section_header: str | None = None
     embedding: list[float]
 
 class QueryRequest(BaseModel):
@@ -68,3 +79,20 @@ class QueryResponse(BaseModel):
     answer: str
     citations: list[Citation]
     latency_ms: dict[str, int]
+
+
+class DocumentResponse(BaseModel):
+
+    document_id: UUID
+    filename: str
+    status: DocumentStatus
+    num_chunks: int | None = None
+    upload_time: datetime
+    file_size_bytes: int
+    error_message: str | None = None
+
+
+class IngestResponse(BaseModel):
+
+    document_id: UUID
+    status: DocumentStatus

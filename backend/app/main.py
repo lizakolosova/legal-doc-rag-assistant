@@ -1,4 +1,6 @@
 import logging
+from contextlib import asynccontextmanager
+from typing import AsyncGenerator
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -14,6 +16,18 @@ from app.exceptions import (
 
 logger = logging.getLogger(__name__)
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    from app.models.database import Base, get_async_engine
+
+    engine = get_async_engine()
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    logger.info("Database tables ensured")
+    yield
+
+
 app = FastAPI(
     title="Legal Doc RAG Assistant",
     description=(
@@ -21,6 +35,7 @@ app = FastAPI(
         "Answers include inline citations back to the source document."
     ),
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 @app.exception_handler(DocumentTooLargeError)
@@ -57,6 +72,11 @@ async def retrieval_error_handler(request: Request, exc: RetrievalError) -> JSON
 async def generic_app_error_handler( request: Request, exc: AppError) -> JSONResponse:
     logger.error("Unhandled application error: %s", exc)
     return JSONResponse(status_code=500, content={"detail": str(exc)})
+
+from app.api.routes_documents import router as documents_router
+
+app.include_router(documents_router)
+
 
 @app.get("/health", tags=["ops"])
 async def health() -> dict[str, str]:

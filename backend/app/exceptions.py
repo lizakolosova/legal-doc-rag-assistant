@@ -1,4 +1,5 @@
 class AppError(Exception):
+    pass
 
 
 class DocumentParseError(AppError):

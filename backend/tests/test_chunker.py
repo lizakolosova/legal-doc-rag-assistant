@@ -1,5 +1,3 @@
-"""Tests for backend/app/ingestion/chunker.py."""
-
 from uuid import UUID, uuid4
 
 import pytest
@@ -51,7 +49,6 @@ def test_chunk_short_section_not_dropped() -> None:
 
 
 def test_chunk_long_section_splits_correctly() -> None:
-    # 300 × "word " = 1500 chars — comfortably exceeds chunk_size=100
     long_text = "word " * 300
     section = _section(long_text)
     chunks = chunk_sections([section], chunk_size=100, chunk_overlap=10)
@@ -76,7 +73,6 @@ def test_chunk_whitespace_section_skipped() -> None:
 
 def test_chunk_indices_are_sequential() -> None:
     doc_id = uuid4()
-    # Two sections each long enough to split into multiple chunks
     sections = [
         _section("word " * 100, document_id=doc_id, section_index=0),
         _section("word " * 100, document_id=doc_id, section_index=1),
