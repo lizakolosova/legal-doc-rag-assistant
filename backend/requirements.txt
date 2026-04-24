@@ -1,0 +1,37 @@
+# Web framework
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+
+# Configuration
+pydantic-settings==2.7.0
+
+# OpenAI SDK (LLM + embeddings)
+openai==1.59.6
+
+# Vector database
+chromadb==0.6.3
+
+# Hybrid search — BM25
+rank-bm25==0.2.2
+
+# Reranker
+sentence-transformers==3.3.1
+
+# Chunking (ONLY LangChain component allowed)
+langchain-text-splitters==0.3.5
+
+# Document parsing
+pymupdf==1.25.1
+python-docx==1.1.2
+
+# Database
+sqlalchemy==2.0.37
+asyncpg==0.30.0
+
+# Evaluation
+ragas==0.2.13
+
+# Testing
+pytest==8.3.4
+pytest-asyncio==0.25.2
+httpx==0.28.1
