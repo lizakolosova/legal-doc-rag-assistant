@@ -17,6 +17,8 @@ import fitz  # PyMuPDF
 import pytest
 from docx import Document
 
+from app.models.schemas import ParsedSection
+
 
 # ---------------------------------------------------------------------------
 # PDF fixtures
@@ -98,3 +100,40 @@ def docx_no_headings(tmp_path: Path) -> Path:
 def document_id() -> object:
     """A fresh UUID for use as a document_id in parser calls."""
     return uuid4()
+
+
+# ---------------------------------------------------------------------------
+# Chunker fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def parsed_sections() -> list[ParsedSection]:
+    """Three ParsedSections from the same document with representative metadata."""
+    doc_id = uuid4()
+    return [
+        ParsedSection(
+            document_id=doc_id,
+            source_file="contract.pdf",
+            page_number=1,
+            section_header="Definitions",
+            text="This section defines the key terms used in this agreement.",
+            section_index=0,
+        ),
+        ParsedSection(
+            document_id=doc_id,
+            source_file="contract.pdf",
+            page_number=2,
+            section_header="Obligations",
+            text="The parties agree to perform all obligations set forth herein.",
+            section_index=1,
+        ),
+        ParsedSection(
+            document_id=doc_id,
+            source_file="contract.pdf",
+            page_number=3,
+            section_header=None,
+            text="Signature block and execution date.",
+            section_index=2,
+        ),
+    ]

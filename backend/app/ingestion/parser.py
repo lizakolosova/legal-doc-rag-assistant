@@ -1,8 +1,3 @@
-"""Document parser for PDF and DOCX files.
-
-Converts raw files into ParsedSection lists for downstream chunking.
-"""
-
 import logging
 import time
 from pathlib import Path
@@ -25,19 +20,6 @@ _HEADING_STYLES: frozenset[str] = frozenset(f"Heading {i}" for i in range(1, 10)
 
 
 def parse_pdf(file_path: Path, document_id: UUID) -> list[ParsedSection]:
-    """Extract text per page from a PDF file.
-
-    Args:
-        file_path: Path to the PDF file on disk.
-        document_id: UUID of the parent document (propagated to all sections).
-
-    Returns:
-        List of ParsedSection, one per page that yields non-empty text.
-
-    Raises:
-        DocumentParseError: If a page contains only images (scanned), or if
-            the entire document yields no extractable text.
-    """
     start = time.monotonic()
     doc = fitz.open(str(file_path))
     sections: list[ParsedSection] = []
@@ -62,6 +44,7 @@ def parse_pdf(file_path: Path, document_id: UUID) -> list[ParsedSection]:
             sections.append(
                 ParsedSection(
                     document_id=document_id,
+                    source_file=file_path.name,
                     page_number=page_index + 1,
                     text=text,
                     section_index=len(sections),
@@ -89,30 +72,11 @@ def parse_pdf(file_path: Path, document_id: UUID) -> list[ParsedSection]:
 
 
 def parse_docx(file_path: Path, document_id: UUID) -> list[ParsedSection]:
-    """Extract text grouped by headings from a DOCX file.
-
-    Paragraphs are grouped under their nearest preceding heading. A new section
-    is emitted whenever a heading-style paragraph is encountered. Paragraphs
-    that appear before the first heading form their own leading section.
-
-    If the document contains no heading-style paragraphs, all text is placed
-    in a single ParsedSection.
-
-    Args:
-        file_path: Path to the DOCX file on disk.
-        document_id: UUID of the parent document.
-
-    Returns:
-        List of ParsedSection, one per heading group (or one total if no
-        headings exist).
-
-    Raises:
-        DocumentParseError: If no text can be extracted from the document.
-    """
     start = time.monotonic()
     doc = Document(str(file_path))
     sections: list[ParsedSection] = []
     current_parts: list[str] = []
+    current_heading: str | None = None
 
     for para in doc.paragraphs:
         stripped = para.text.strip()
@@ -121,12 +85,15 @@ def parse_docx(file_path: Path, document_id: UUID) -> list[ParsedSection]:
                 sections.append(
                     ParsedSection(
                         document_id=document_id,
+                        source_file=file_path.name,
                         page_number=None,
+                        section_header=current_heading,
                         text="\n".join(current_parts),
                         section_index=len(sections),
                     )
                 )
             current_parts = [stripped]
+            current_heading = stripped
         elif stripped:
             current_parts.append(stripped)
 
@@ -134,7 +101,9 @@ def parse_docx(file_path: Path, document_id: UUID) -> list[ParsedSection]:
         sections.append(
             ParsedSection(
                 document_id=document_id,
+                source_file=file_path.name,
                 page_number=None,
+                section_header=current_heading,
                 text="\n".join(current_parts),
                 section_index=len(sections),
             )
@@ -159,24 +128,6 @@ def parse_docx(file_path: Path, document_id: UUID) -> list[ParsedSection]:
 
 
 def parse_document(file_path: Path, document_id: UUID) -> list[ParsedSection]:
-    """Route a document to the appropriate parser after size validation.
-
-    Checks file size against settings.max_file_size_mb. For PDFs, also checks
-    page count against settings.max_pages. Dispatches to parse_pdf or
-    parse_docx based on file extension.
-
-    Args:
-        file_path: Path to the document file on disk.
-        document_id: UUID of the parent document.
-
-    Returns:
-        List of ParsedSection from the appropriate sub-parser.
-
-    Raises:
-        DocumentTooLargeError: If the file exceeds the size or page limit.
-        UnsupportedFormatError: If the extension is not .pdf or .docx.
-        DocumentParseError: If the file cannot be parsed into text.
-    """
     size_mb = file_path.stat().st_size / (1024 * 1024)
     if size_mb > settings.max_file_size_mb:
         raise DocumentTooLargeError(
