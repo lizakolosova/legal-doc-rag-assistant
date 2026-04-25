@@ -76,16 +76,17 @@ class QueryRequest(BaseModel):
 
 class Citation(BaseModel):
 
-    chunk_id: UUID
-    document_id: UUID
-    filename: str
-    page_number: int | None
+    index: int
+    source_file: str
+    page_number: int
     chunk_text: str
-    relevance_score: float
+    section_header: str | None
 
 
 class QueryResponse(BaseModel):
 
+    answer: str
+    citations: list[Citation]
     chunks: list[RetrievedChunk]
     retrieval_method: str
     latency_ms: float

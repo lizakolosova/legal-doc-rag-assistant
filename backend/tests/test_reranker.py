@@ -104,22 +104,28 @@ async def test_query_endpoint_full_pipeline() -> None:
 
     mock_hybrid = AsyncMock(return_value=hybrid_chunks)
     mock_rerank = MagicMock(return_value=reranked)
+    mock_generate = AsyncMock(return_value="The indemnity clause provides...")
+    mock_build = MagicMock(return_value=[{"role": "user", "content": "..."}])
+    mock_citations = MagicMock(return_value=[])
 
     try:
         with patch("app.api.routes_query.hybrid_search", mock_hybrid):
             with patch("app.api.routes_query.rerank", mock_rerank):
-                async with httpx.AsyncClient(
-                    transport=httpx.ASGITransport(app=app),
-                    base_url="http://testserver",
-                ) as client:
-                    response = await client.post(
-                        "/api/query",
-                        json={
-                            "question": "what is the indemnity clause?",
-                            "top_k": 2,
-                            "use_reranker": True,
-                        },
-                    )
+                with patch("app.api.routes_query.generate_answer", mock_generate):
+                    with patch("app.api.routes_query.build_messages", mock_build):
+                        with patch("app.api.routes_query.extract_citations", mock_citations):
+                            async with httpx.AsyncClient(
+                                transport=httpx.ASGITransport(app=app),
+                                base_url="http://testserver",
+                            ) as client:
+                                response = await client.post(
+                                    "/api/query",
+                                    json={
+                                        "question": "what is the indemnity clause?",
+                                        "top_k": 2,
+                                        "use_reranker": True,
+                                    },
+                                )
 
         assert response.status_code == 200
         data = response.json()
@@ -127,6 +133,8 @@ async def test_query_endpoint_full_pipeline() -> None:
         assert len(data["chunks"]) == 2
         assert data["chunks"][0]["chunk_id"] == "c2"
         assert "latency_ms" in data
+        assert "answer" in data
+        assert "citations" in data
 
         mock_hybrid.assert_called_once()
         assert mock_hybrid.call_args.kwargs.get("top_k") == 4  # top_k * 2

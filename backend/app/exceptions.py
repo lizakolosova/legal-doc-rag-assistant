@@ -38,3 +38,9 @@ class RetrievalError(AppError):
     def __init__(self, reason: str) -> None:
         self.reason = reason
         super().__init__(f"Retrieval failed: {reason}")
+
+
+class GenerationError(AppError):
+    def __init__(self, reason: str) -> None:
+        self.reason = reason
+        super().__init__(f"Generation failed: {reason}")
