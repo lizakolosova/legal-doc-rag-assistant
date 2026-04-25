@@ -55,6 +55,17 @@ class EmbeddedChunk(BaseModel):
     section_header: str | None = None
     embedding: list[float]
 
+class RetrievedChunk(BaseModel):
+
+    chunk_id: str
+    document_id: str
+    text: str
+    score: float
+    source_file: str
+    page_number: int
+    section_header: str | None
+
+
 class QueryRequest(BaseModel):
 
     query: str = Field(..., min_length=1, max_length=2000)
