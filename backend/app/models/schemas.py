@@ -68,9 +68,10 @@ class RetrievedChunk(BaseModel):
 
 class QueryRequest(BaseModel):
 
-    query: str = Field(..., min_length=1, max_length=2000)
-    document_id: UUID | None = None
-    top_k: int | None = Field(default=None, ge=1, le=50)
+    question: str = Field(..., min_length=1, max_length=2000)
+    document_ids: list[str] | None = None
+    top_k: int = Field(default=5, ge=1, le=50)
+    use_reranker: bool = True
 
 
 class Citation(BaseModel):
@@ -85,11 +86,9 @@ class Citation(BaseModel):
 
 class QueryResponse(BaseModel):
 
-    query_id: UUID = Field(default_factory=uuid4)
-    query: str
-    answer: str
-    citations: list[Citation]
-    latency_ms: dict[str, int]
+    chunks: list[RetrievedChunk]
+    retrieval_method: str
+    latency_ms: float
 
 
 class DocumentResponse(BaseModel):

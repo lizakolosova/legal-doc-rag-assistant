@@ -74,8 +74,10 @@ async def generic_app_error_handler( request: Request, exc: AppError) -> JSONRes
     return JSONResponse(status_code=500, content={"detail": str(exc)})
 
 from app.api.routes_documents import router as documents_router
+from app.api.routes_query import router as query_router
 
 app.include_router(documents_router)
+app.include_router(query_router)
 
 
 @app.get("/health", tags=["ops"])
