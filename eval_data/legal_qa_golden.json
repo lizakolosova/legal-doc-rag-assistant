@@ -1,32 +1,32 @@
 [
   {
     "id": "q1",
-    "question": "What is the monthly cost of the Base44 Builder plan?",
-    "expected_answer": "The Base44 Builder plan costs €50 per month.",
-    "relevant_sources": [{"file": "archetype_solutions_final.docx", "page": -1}]
+    "question": "What is the liability cap for damaged or lost cargo?",
+    "expected_answer": "The carrier liability is limited to EUR 2.00 per kilogram of gross weight of the lost or damaged goods.",
+    "relevant_sources": [{"file": "carrier_agreement.docx", "page": -1}]
   },
   {
     "id": "q2",
-    "question": "How long does the current manual presentation process take per candidate?",
-    "expected_answer": "Steps 3-6 take 30-45+ minutes per candidate.",
-    "relevant_sources": [{"file": "archetype_solutions_final.docx", "page": -1}]
+    "question": "What is the notice period required to terminate this carrier agreement?",
+    "expected_answer": "Either party may terminate the agreement with 30 days written notice.",
+    "relevant_sources": [{"file": "carrier_agreement.docx", "page": -1}]
   },
   {
     "id": "q3",
-    "question": "Which Python library is used to generate PowerPoint presentations?",
-    "expected_answer": "python-pptx is used to create PowerPoint files programmatically.",
-    "relevant_sources": [{"file": "archetype_solutions_final.docx", "page": -1}]
+    "question": "What is the payment term for invoices under this agreement?",
+    "expected_answer": "Invoices are payable within 30 calendar days of the invoice date.",
+    "relevant_sources": [{"file": "carrier_agreement.docx", "page": -1}]
   },
   {
     "id": "q4",
-    "question": "Does Solution 01 require a developer to maintain it?",
-    "expected_answer": "No. Solution 01 uses Google Sheets and Looker Studio so the team does not need a developer to maintain it.",
-    "relevant_sources": [{"file": "archetype_solutions_final.docx", "page": -1}]
+    "question": "Does this agreement include a force majeure clause?",
+    "expected_answer": "Yes. The agreement includes a force majeure clause covering events beyond reasonable control including natural disasters, strikes, and government actions.",
+    "relevant_sources": [{"file": "carrier_agreement.docx", "page": -1}]
   },
   {
     "id": "q5",
-    "question": "What is the recommended first step for Solution 02?",
-    "expected_answer": "Start with Scenario A using Base44 before considering a custom-built solution.",
-    "relevant_sources": [{"file": "archetype_solutions_final.docx", "page": -1}]
+    "question": "Does this agreement include a non-solicitation clause?",
+    "expected_answer": "Yes. Neither party may solicit the other party's employees for 12 months after termination.",
+    "relevant_sources": [{"file": "carrier_agreement.docx", "page": -1}]
   }
 ]

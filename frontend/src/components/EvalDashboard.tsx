@@ -5,8 +5,6 @@ import type { EvalResult, EvalRunDetailResponse, EvalRunSummaryResponse } from '
 const METRIC_KEYS = [
   'context_precision',
   'context_recall',
-  'faithfulness',
-  'answer_relevancy',
 ] as const
 
 type MetricKey = (typeof METRIC_KEYS)[number]
@@ -14,8 +12,6 @@ type MetricKey = (typeof METRIC_KEYS)[number]
 const METRIC_LABELS: Record<MetricKey, string> = {
   context_precision: 'Context Precision',
   context_recall: 'Context Recall',
-  faithfulness: 'Faithfulness',
-  answer_relevancy: 'Answer Relevancy',
 }
 
 function metricColor(val: number | null | undefined): string {
@@ -92,7 +88,7 @@ function ResultRow({ result }: { result: EvalResult }) {
       </tr>
       {open && (
         <tr className="bg-slate-50">
-          <td colSpan={7} className="px-3 pb-3 pt-1">
+          <td colSpan={5} className="px-3 pb-3 pt-1">
             <div className="grid grid-cols-2 gap-3 text-xs">
               <div>
                 <p className="font-semibold text-slate-600 mb-1">Expected</p>

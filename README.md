@@ -128,3 +128,4 @@ curl -X POST http://localhost:8080/api/eval/run
 See `/docs/screenshots/` for UI screenshots.
 
 ![Application UI](docs/screenshots/img.png)
+![Application UI](docs/screenshots/img_1.png)
