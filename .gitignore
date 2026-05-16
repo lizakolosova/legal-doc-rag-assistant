@@ -1,4 +1,32 @@
-/.idea/*
-/.claude/*
-/CLAUDE.md
+# Environment — never commit real secrets
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+.mypy_cache/
+.ruff_cache/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Node / frontend
+node_modules/
+frontend/node_modules/
+frontend/dist/
+
+# Data volumes (Docker bind-mounts)
+chroma_data/
+postgres_data/
+uploaded_files/
+
+# Protected docs
 /docs/specs/project-overview-spec.md

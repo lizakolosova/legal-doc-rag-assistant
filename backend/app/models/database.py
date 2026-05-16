@@ -64,9 +64,11 @@ class EvaluationRun(Base):
 
 
 def get_async_engine() -> AsyncEngine:
+    """Create an async SQLAlchemy engine from settings.postgres_url."""
     return create_async_engine(settings.postgres_url, echo=False)
 
 
 def get_async_session() -> async_sessionmaker[AsyncSession]:
+    """Create and return an async session factory bound to a fresh engine."""
     engine = get_async_engine()
     return async_sessionmaker(engine, expire_on_commit=False)

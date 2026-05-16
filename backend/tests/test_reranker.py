@@ -3,13 +3,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from backend.app.exceptions import RetrievalError
-from backend.app.models.schemas import RetrievedChunk
-from backend.app.retrieval.reranker import rerank
+from app.exceptions import RetrievalError
+from app.models.schemas import RetrievedChunk
+from app.retrieval.reranker import rerank
 import httpx
 
-from backend.app.api.routes_query import _get_session
-from backend.app.main import app
+from app.api.routes_query import _get_session
+from app.main import app
 
 
 def _make_chunk(chunk_id: str, doc_id: str, score: float = 0.5) -> RetrievedChunk:

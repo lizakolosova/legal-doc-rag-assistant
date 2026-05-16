@@ -3,9 +3,10 @@ from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from backend.app.exceptions import (
+from app.exceptions import (
     AppError,
     DocumentParseError,
     DocumentTooLargeError,
@@ -14,17 +15,17 @@ from backend.app.exceptions import (
     UnsupportedFormatError,
 )
 
-from backend.app.models.database import Base, get_async_engine
-from backend.app.api.routes_documents import router as documents_router
-from backend.app.api.routes_eval import router as eval_router
-from backend.app.api.routes_query import router as query_router
+from app.models.database import Base, get_async_engine
+from app.api.routes_documents import router as documents_router
+from app.api.routes_eval import router as eval_router
+from app.api.routes_query import router as query_router
 
 logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-
+    """Create database tables on startup; yield control to the application."""
     engine = get_async_engine()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -40,6 +41,14 @@ app = FastAPI(
     ),
     version="0.1.0",
     lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 @app.exception_handler(DocumentTooLargeError)
@@ -83,4 +92,5 @@ app.include_router(eval_router)
 
 @app.get("/health", tags=["ops"])
 async def health() -> dict[str, str]:
+    """Return 200 OK when the service is running."""
     return {"status": "ok"}

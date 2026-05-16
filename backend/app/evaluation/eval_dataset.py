@@ -4,9 +4,9 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
-logger = logging.getLogger(__name__)
+from app.config import settings
 
-_DEFAULT_PATH = Path(__file__).resolve().parents[3] / "eval_data" / "legal_qa_golden.json"
+logger = logging.getLogger(__name__)
 
 
 class GoldenQA(BaseModel):
@@ -17,7 +17,18 @@ class GoldenQA(BaseModel):
 
 
 def load_golden_dataset(path: Path | None = None) -> list[GoldenQA]:
-    resolved = path if path is not None else _DEFAULT_PATH
+    """Load the golden Q&A dataset from a JSON file.
+
+    Args:
+        path: Path to the JSON file; defaults to eval_data/legal_qa_golden.json.
+
+    Returns:
+        List of GoldenQA objects.
+
+    Raises:
+        FileNotFoundError: If the dataset file does not exist at the resolved path.
+    """
+    resolved = path if path is not None else Path(settings.eval_data_path)
     if not resolved.exists():
         raise FileNotFoundError(f"Golden dataset not found at '{resolved}'. "
             "Create eval_data/legal_qa_golden.json or pass an explicit path.")

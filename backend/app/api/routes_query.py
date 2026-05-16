@@ -30,6 +30,7 @@ async def query_documents(
     body: QueryRequest,
     session: AsyncSession = Depends(_get_session),
 ) -> QueryResponse:
+    """Run the full RAG pipeline and return a structured answer with citations."""
     start = time.monotonic()
     k = body.top_k
 
@@ -75,6 +76,7 @@ async def stream_query_documents(
     body: QueryRequest,
     session: AsyncSession = Depends(_get_session),
 ) -> StreamingResponse:
+    """Stream the LLM answer token-by-token as newline-delimited JSON, then emit citations."""
     k = body.top_k
 
     results = await hybrid_search(

@@ -24,6 +24,19 @@ def reciprocal_rank_fusion(
     bm25_results: list[RetrievedChunk],
     k: int = 60,
 ) -> list[RetrievedChunk]:
+    """Merge two ranked lists using Reciprocal Rank Fusion.
+
+    Each chunk's RRF score is the sum of 1/(k + rank) across both lists.
+    Chunks that appear in both lists receive a higher combined score.
+
+    Args:
+        vector_results: Chunks ranked by vector similarity.
+        bm25_results: Chunks ranked by BM25 score.
+        k: RRF constant (default 60 per the original paper).
+
+    Returns:
+        Deduplicated chunks sorted by RRF score descending.
+    """
     rrf_scores: dict[str, float] = {}
     chunk_map: dict[str, RetrievedChunk] = {}
 
@@ -48,6 +61,18 @@ async def hybrid_search(
     document_ids: list[str] | None = None,
     bm25_index: tuple[BM25Okapi, list[Chunk]] | None = None,
 ) -> list[RetrievedChunk]:
+    """Run vector search and BM25 in parallel, then merge with RRF.
+
+    Args:
+        query: Natural-language question.
+        session: Active async SQLAlchemy session (used to build BM25 index if not supplied).
+        top_k: Number of merged results to return; defaults to settings.retrieval_top_k.
+        document_ids: If set, restricts both searches to these document IDs.
+        bm25_index: Pre-built (index, chunks) tuple; rebuilt from Postgres if None.
+
+    Returns:
+        Merged and deduplicated chunks sorted by RRF score descending.
+    """
     k = top_k if top_k is not None else settings.retrieval_top_k
     start = time.monotonic()
 

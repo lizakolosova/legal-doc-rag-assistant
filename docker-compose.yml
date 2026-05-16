@@ -1,5 +1,16 @@
 services:
 
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_URL: http://localhost:8080
+    depends_on:
+      - api
+
   api:
     build:
       context: ./backend
@@ -7,9 +18,8 @@ services:
     ports:
       - "8080:8080"
     environment:
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
-      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
-      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-3-small}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-1.5-flash}
       CHROMA_HOST: chromadb
       CHROMA_PORT: 8000
       POSTGRES_URL: postgresql+asyncpg://legal:legal@postgres:5432/legal_rag
@@ -27,6 +37,7 @@ services:
         condition: service_started
     volumes:
       - uploaded_files:/app/uploads
+      - ./eval_data:/app/eval_data:ro
 
   postgres:
     image: postgres:16-alpine

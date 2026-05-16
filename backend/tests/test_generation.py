@@ -1,13 +1,12 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from google.api_core.exceptions import ResourceExhausted
 
-from backend.app.exceptions import GenerationError
-from backend.app.generation.prompt_builder import build_messages, extract_citations
-from backend.app.models.schemas import RetrievedChunk
-
-from openai import RateLimitError
-from backend.app.generation.llm_client import _RETRY_DELAYS, generate_answer
+from app.exceptions import GenerationError
+from app.generation.llm_client import _RETRY_DELAYS, generate_answer
+from app.generation.prompt_builder import build_messages, extract_citations
+from app.models.schemas import RetrievedChunk
 
 
 def _make_chunk(
@@ -29,14 +28,11 @@ def _make_chunk(
     )
 
 
-def _make_openai_response(content: str) -> MagicMock:
-    choice = MagicMock()
-    choice.message.content = content
+def _make_gemini_response(content: str) -> MagicMock:
     response = MagicMock()
-    response.choices = [choice]
-    response.usage.prompt_tokens = 100
-    response.usage.completion_tokens = 50
+    response.text = content
     return response
+
 
 def test_build_messages_includes_all_chunks() -> None:
     chunks = [
@@ -101,49 +97,52 @@ def test_extract_citations_maps_correctly() -> None:
     assert citations[1].section_header is None
     assert citations[1].chunk_text == chunks[1].text
 
-async def test_generate_answer_returns_string() -> None:
-    mock_response = _make_openai_response("The indemnity clause states that...")
-    mock_client = AsyncMock()
-    mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
 
-    with patch("app.generation.llm_client._client", mock_client):
-        result = await generate_answer([{"role": "user", "content": "What is the indemnity clause?"}])
+async def test_generate_answer_returns_string() -> None:
+    mock_response = _make_gemini_response("The indemnity clause states that...")
+    mock_model = MagicMock()
+    mock_model.generate_content_async = AsyncMock(return_value=mock_response)
+
+    with patch("app.generation.llm_client.genai.GenerativeModel", return_value=mock_model):
+        with patch("app.generation.llm_client._ensure_configured"):
+            result = await generate_answer([{"role": "user", "content": "What is the indemnity clause?"}])
 
     assert isinstance(result, str)
     assert result == "The indemnity clause states that..."
-    mock_client.chat.completions.create.assert_called_once()
+    mock_model.generate_content_async.assert_called_once()
 
 
 async def test_generate_answer_retries_on_rate_limit() -> None:
+    mock_response = _make_gemini_response("Answer after retry.")
+    rate_limit_exc = ResourceExhausted("Rate limited")
 
-    mock_response = _make_openai_response("Answer after retry.")
-    rate_limit_exc = RateLimitError("Rate limited", response=MagicMock(), body={})
-
-    mock_client = AsyncMock()
-    mock_client.chat.completions.create = AsyncMock(
+    mock_model = MagicMock()
+    mock_model.generate_content_async = AsyncMock(
         side_effect=[rate_limit_exc, mock_response]
     )
 
-    with patch("app.generation.llm_client._client", mock_client):
-        with patch("app.generation.llm_client.asyncio.sleep", AsyncMock()):
-            result = await generate_answer([{"role": "user", "content": "question"}])
+    with patch("app.generation.llm_client.genai.GenerativeModel", return_value=mock_model):
+        with patch("app.generation.llm_client._ensure_configured"):
+            with patch("app.generation.llm_client.asyncio.sleep", AsyncMock()):
+                result = await generate_answer([{"role": "user", "content": "question"}])
 
     assert result == "Answer after retry."
-    assert mock_client.chat.completions.create.call_count == 2
+    assert mock_model.generate_content_async.call_count == 2
 
 
 async def test_generate_answer_raises_after_max_retries() -> None:
-    rate_limit_exc = RateLimitError("Rate limited", response=MagicMock(), body={})
+    rate_limit_exc = ResourceExhausted("Rate limited")
     total_attempts = len(_RETRY_DELAYS) + 1
 
-    mock_client = AsyncMock()
-    mock_client.chat.completions.create = AsyncMock(
+    mock_model = MagicMock()
+    mock_model.generate_content_async = AsyncMock(
         side_effect=[rate_limit_exc] * total_attempts
     )
 
-    with patch("app.generation.llm_client._client", mock_client):
-        with patch("app.generation.llm_client.asyncio.sleep", AsyncMock()):
-            with pytest.raises(GenerationError):
-                await generate_answer([{"role": "user", "content": "question"}])
+    with patch("app.generation.llm_client.genai.GenerativeModel", return_value=mock_model):
+        with patch("app.generation.llm_client._ensure_configured"):
+            with patch("app.generation.llm_client.asyncio.sleep", AsyncMock()):
+                with pytest.raises(GenerationError):
+                    await generate_answer([{"role": "user", "content": "question"}])
 
-    assert mock_client.chat.completions.create.call_count == total_attempts
+    assert mock_model.generate_content_async.call_count == total_attempts

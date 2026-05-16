@@ -5,9 +5,6 @@ from pydantic import BaseModel
 
 from app.evaluation.eval_dataset import GoldenQA
 from app.models.schemas import RetrievedChunk
-from datasets import Dataset
-from ragas import evaluate
-from ragas.metrics import answer_relevancy, faithfulness
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +22,19 @@ class EvalResult(BaseModel):
     latency_ms: float
 
 
-def compute_retrieval_metrics(question: GoldenQA,retrieved_chunks: list[RetrievedChunk],) -> dict[str, float]:
+def compute_retrieval_metrics(question: GoldenQA, retrieved_chunks: list[RetrievedChunk]) -> dict[str, float]:
+    """Compute heuristic context precision and recall against the golden sources.
+
+    Precision = fraction of retrieved chunks whose source file is in the relevant set.
+    Recall = fraction of relevant source files covered by retrieved chunks.
+
+    Args:
+        question: Golden Q&A entry with known relevant_sources.
+        retrieved_chunks: Chunks returned by the retrieval pipeline.
+
+    Returns:
+        Dict with keys "context_precision" and "context_recall" in [0, 1].
+    """
     if not retrieved_chunks:
         return {"context_precision": 0.0, "context_recall": 0.0}
 
@@ -45,8 +54,24 @@ def compute_retrieval_metrics(question: GoldenQA,retrieved_chunks: list[Retrieve
     return {"context_precision": context_precision, "context_recall": context_recall}
 
 
-def compute_ragas_metrics(question: str,answer: str,chunks: list[RetrievedChunk],) -> dict[str, float | None]:
+def compute_ragas_metrics(question: str, answer: str, chunks: list[RetrievedChunk]) -> dict[str, float | None]:
+    """Run RAGAS faithfulness and answer_relevancy evaluation.
+
+    Falls back to None scores on any RAGAS failure so evaluation can continue.
+
+    Args:
+        question: The user's question.
+        answer: The LLM-generated answer.
+        chunks: Retrieved chunks used as context.
+
+    Returns:
+        Dict with keys "faithfulness" and "answer_relevancy" (each float or None).
+    """
     try:
+        from datasets import Dataset
+        from ragas import evaluate
+        from ragas.metrics import answer_relevancy, faithfulness
+
         contexts = [chunk.text for chunk in chunks]
         data: dict[str, list[Any]] = {
             "question": [question],

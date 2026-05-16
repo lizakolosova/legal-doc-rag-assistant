@@ -1,5 +1,6 @@
 import logging
 import time
+from typing import Any
 
 from app.config import settings
 from app.exceptions import RetrievalError
@@ -7,14 +8,14 @@ from app.models.schemas import RetrievedChunk
 
 logger = logging.getLogger(__name__)
 
-_cross_encoder = None
+_cross_encoder: Any = None
 
 
-def _get_cross_encoder():
+def _get_cross_encoder() -> Any:
     global _cross_encoder
     if _cross_encoder is None:
         from sentence_transformers import CrossEncoder
-        _cross_encoder = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
+        _cross_encoder = CrossEncoder(settings.reranker_model)
     return _cross_encoder
 
 
@@ -23,6 +24,16 @@ def rerank(
     chunks: list[RetrievedChunk],
     top_k: int | None = None,
 ) -> list[RetrievedChunk]:
+    """Re-score and truncate chunks using a cross-encoder model.
+
+    Args:
+        query: The user's question.
+        chunks: Candidate chunks from hybrid retrieval.
+        top_k: Number of chunks to return; defaults to settings.rerank_top_k.
+
+    Returns:
+        Top-k chunks sorted by cross-encoder score descending.
+    """
     if not chunks:
         return []
 

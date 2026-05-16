@@ -24,7 +24,7 @@ async def _get_session() -> AsyncSession:
 
 
 @router.post("", response_model=IngestResponse, status_code=status.HTTP_201_CREATED)
-async def upload_document( file: UploadFile, session: AsyncSession = Depends(_get_session)) -> IngestResponse:
+async def upload_document(file: UploadFile, session: AsyncSession = Depends(_get_session)) -> IngestResponse:
     suffix = Path(file.filename or "upload").suffix
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
@@ -32,7 +32,7 @@ async def upload_document( file: UploadFile, session: AsyncSession = Depends(_ge
         tmp_path = Path(tmp.name)
 
     try:
-        document_id = await ingest_document(tmp_path, session)
+        document_id = await ingest_document(tmp_path, session, original_filename=file.filename)
     finally:
         tmp_path.unlink(missing_ok=True)
 
@@ -44,31 +44,19 @@ async def list_documents(session: AsyncSession = Depends(_get_session)) -> list[
     result = await session.execute(select(Document).order_by(Document.upload_time.desc()))
     docs = result.scalars().all()
     return [
-        DocumentResponse(
-            document_id=doc.id,
-            filename=doc.filename,
-            status=doc.status,
-            num_chunks=doc.num_chunks,
-            upload_time=doc.upload_time,
-            file_size_bytes=doc.file_size_bytes,
-            error_message=doc.error_message,
-        )
+        DocumentResponse(document_id=doc.id, filename=doc.filename, status=doc.status, num_chunks=doc.num_chunks,
+            upload_time=doc.upload_time, file_size_bytes=doc.file_size_bytes, error_message=doc.error_message)
         for doc in docs
     ]
 
 
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_document(
-    document_id: UUID,
-    session: AsyncSession = Depends(_get_session),
-) -> None:
+async def delete_document( document_id: UUID, session: AsyncSession = Depends(_get_session)) -> None:
     doc = await session.get(Document, document_id)
     if doc is None:
         raise HTTPException(status_code=404, detail=f"Document {document_id} not found")
 
-    chroma_ids_result = await session.execute(
-        select(Chunk.chroma_id).where(Chunk.document_id == document_id)
-    )
+    chroma_ids_result = await session.execute(select(Chunk.chroma_id).where(Chunk.document_id == document_id))
     chroma_ids = chroma_ids_result.scalars().all()
 
     if chroma_ids:
@@ -78,7 +66,7 @@ async def delete_document(
             client = await chromadb.AsyncHttpClient(
                 host=settings.chroma_host, port=settings.chroma_port
             )
-            collection = await client.get_collection("documents")
+            collection = await client.get_collection(settings.chroma_collection)
             await collection.delete(ids=list(chroma_ids))
         except Exception as exc:
             logger.warning("ChromaDB deletion failed for document %s: %s", document_id, exc)

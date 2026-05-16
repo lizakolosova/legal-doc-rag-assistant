@@ -26,6 +26,14 @@ def _tokenize(text: str) -> list[str]:
 
 
 async def build_bm25_index(session: AsyncSession) -> tuple[BM25Okapi, list[Chunk]]:
+    """Load all chunks from Postgres and build a BM25Okapi index over their tokens.
+
+    Args:
+        session: Active async SQLAlchemy session.
+
+    Returns:
+        Tuple of (BM25Okapi index, corresponding Chunk ORM objects).
+    """
     from rank_bm25 import BM25Okapi  # deferred: not available outside Docker
 
     result = await session.execute(
@@ -43,6 +51,18 @@ def bm25_search(
     top_k: int | None = None,
     document_ids: list[str] | None = None,
 ) -> list[RetrievedChunk]:
+    """Score chunks against a query using BM25 and return top-k results.
+
+    Args:
+        query: Natural-language question to score against.
+        chunks: Chunk ORM objects that correspond 1-to-1 with the BM25 index.
+        bm25_index: Pre-built BM25Okapi index over chunk tokens.
+        top_k: Maximum results to return; defaults to settings.retrieval_top_k.
+        document_ids: If set, restricts scoring to these document IDs.
+
+    Returns:
+        Top-k chunks with normalised BM25 scores, sorted descending.
+    """
     if not chunks:
         return []
 

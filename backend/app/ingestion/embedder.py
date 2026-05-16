@@ -2,9 +2,9 @@ import logging
 import time
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 from uuid import UUID, uuid4
 
-import openai
 import chromadb
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,49 +15,80 @@ from app.ingestion.parser import parse_document
 from app.models.database import Chunk, Document
 from app.models.schemas import DocumentStatus, EmbeddedChunk, TextChunk
 
-
 logger = logging.getLogger(__name__)
 
-_EMBED_BATCH_SIZE = 100
+_embed_model: Any = None
+
+
+def _get_embed_model() -> Any:
+    global _embed_model
+    if _embed_model is None:
+        from sentence_transformers import SentenceTransformer
+        _embed_model = SentenceTransformer("all-MiniLM-L6-v2")
+    return _embed_model
 
 
 async def embed_chunks(chunks: list[TextChunk]) -> list[EmbeddedChunk]:
+    """Embed text chunks using the local sentence-transformers model.
+
+    Args:
+        chunks: Text chunks to embed.
+
+    Returns:
+        Same chunks with a 384-dim embedding vector attached.
+
+    Raises:
+        EmbeddingError: On embedding failure.
+    """
     if not chunks:
         return []
 
     start = time.monotonic()
-    client = openai.AsyncOpenAI(api_key=settings.openai_api_key)
+    model = _get_embed_model()
 
-    batches = [chunks[i : i + _EMBED_BATCH_SIZE] for i in range(0, len(chunks), _EMBED_BATCH_SIZE)]
-    logger.info("Embedding %d chunks in %d batch(es)", len(chunks), len(batches))
+    try:
+        embeddings = model.encode([c.text for c in chunks], show_progress_bar=False).tolist()
+    except Exception as exc:
+        raise EmbeddingError(str(exc)) from exc
 
     embedded: list[EmbeddedChunk] = []
-    for batch in batches:
-        try:
-            response = await client.embeddings.create( model=settings.embedding_model, input=[c.text for c in batch])
-        except openai.OpenAIError as exc:
-            raise EmbeddingError(str(exc)) from exc
-
-        for chunk, item in zip(batch, response.data):
-            embedded.append(EmbeddedChunk(chunk_id=chunk.chunk_id, document_id=chunk.document_id, text=chunk.text,
-                    chunk_index=chunk.chunk_index, page_number=chunk.page_number, source_file=chunk.source_file,
-                              section_header=chunk.section_header,embedding=item.embedding))
+    for chunk, embedding in zip(chunks, embeddings):
+        embedded.append(
+            EmbeddedChunk(
+                chunk_id=chunk.chunk_id,
+                document_id=chunk.document_id,
+                text=chunk.text,
+                chunk_index=chunk.chunk_index,
+                page_number=chunk.page_number,
+                source_file=chunk.source_file,
+                section_header=chunk.section_header,
+                embedding=embedding,
+            )
+        )
 
     elapsed_ms = int((time.monotonic() - start) * 1000)
-    logger.info( "Embedded %d chunks in %d batch(es), elapsed=%dms",len(chunks), len(batches), elapsed_ms)
+    logger.info("Embedded %d chunks, elapsed=%dms", len(chunks), elapsed_ms)
     return embedded
 
 
-async def store_in_chroma(embedded: list[EmbeddedChunk], collection_name: str = "documents") -> None:
+async def store_in_chroma(embedded: list[EmbeddedChunk], collection_name: str | None = None) -> None:
+    """Upsert embedded chunks into ChromaDB.
 
+    Args:
+        embedded: Chunks with embedding vectors to store.
+        collection_name: Target collection; defaults to settings.chroma_collection.
+    """
     if not embedded:
         return
 
+    resolved_name = collection_name if collection_name is not None else settings.chroma_collection
     client = await chromadb.AsyncHttpClient(host=settings.chroma_host, port=settings.chroma_port)
-    collection = await client.get_or_create_collection(collection_name)
+    collection = await client.get_or_create_collection(resolved_name)
 
     ids = [f"{chunk.document_id}_{chunk.chunk_index}" for chunk in embedded]
-    await collection.upsert(ids=ids, embeddings=[chunk.embedding for chunk in embedded],
+    await collection.upsert(
+        ids=ids,
+        embeddings=[chunk.embedding for chunk in embedded],
         documents=[chunk.text for chunk in embedded],
         metadatas=[
             {
@@ -71,40 +102,92 @@ async def store_in_chroma(embedded: list[EmbeddedChunk], collection_name: str = 
         ],
     )
 
-    logger.info("Stored %d chunk(s) in ChromaDB collection '%s'", len(embedded), collection_name)
+    logger.info("Stored %d chunk(s) in ChromaDB collection '%s'", len(embedded), resolved_name)
 
 
 async def store_in_postgres(document_id: UUID, filename: str, chunks: list[TextChunk], session: AsyncSession) -> None:
-    doc = Document(id=document_id, filename=filename, upload_time=datetime.now(UTC), num_chunks=len(chunks),
-        status=DocumentStatus.ready, file_size_bytes=0)
+    """Persist a document record and its chunks to PostgreSQL.
+
+    Args:
+        document_id: UUID of the document being stored.
+        filename: Original filename, used for display.
+        chunks: Text chunks to store as Chunk rows.
+        session: Active async SQLAlchemy session.
+    """
+    doc = Document(
+        id=document_id,
+        filename=filename,
+        upload_time=datetime.now(UTC),
+        num_chunks=len(chunks),
+        status=DocumentStatus.ready,
+        file_size_bytes=0,
+    )
     session.add(doc)
 
     for chunk in chunks:
-        session.add(Chunk(document_id=document_id,chunk_index=chunk.chunk_index, text=chunk.text,
-                page_number=chunk.page_number, section_header=chunk.section_header, chroma_id=f"{document_id}_{chunk.chunk_index}"))
+        session.add(
+            Chunk(
+                document_id=document_id,
+                chunk_index=chunk.chunk_index,
+                text=chunk.text,
+                page_number=chunk.page_number,
+                section_header=chunk.section_header,
+                chroma_id=f"{document_id}_{chunk.chunk_index}",
+            )
+        )
 
     await session.commit()
 
 
-async def ingest_document(file_path: Path, session: AsyncSession) -> UUID:
+async def ingest_document(file_path: Path, session: AsyncSession, original_filename: str | None = None) -> UUID:
+    """Run the full ingestion pipeline for a single document.
+
+    Parses, chunks, embeds, and stores the document atomically. On any failure
+    the document is marked as failed in Postgres and the exception is re-raised.
+
+    Args:
+        file_path: Absolute path to the uploaded file (PDF or DOCX).
+        session: Active async SQLAlchemy session.
+
+    Returns:
+        UUID of the successfully ingested document.
+
+    Raises:
+        DocumentParseError: If the file cannot be parsed.
+        EmbeddingError: If the embedding call fails.
+        DocumentTooLargeError: If the file exceeds configured size/page limits.
+    """
     document_id = uuid4()
-    filename = file_path.name
+    filename = original_filename or file_path.name
     file_size = file_path.stat().st_size
 
-    doc = Document( id=document_id, filename=filename, upload_time=datetime.now(UTC), file_size_bytes=file_size,
-                    status=DocumentStatus.processing, )
+    doc = Document(
+        id=document_id,
+        filename=filename,
+        upload_time=datetime.now(UTC),
+        file_size_bytes=file_size,
+        status=DocumentStatus.processing,
+    )
     session.add(doc)
     await session.commit()
 
     try:
-        sections = parse_document(file_path, document_id)
+        sections = parse_document(file_path, document_id, source_filename=filename)
         chunks = chunk_sections(sections)
         embedded = await embed_chunks(chunks)
         await store_in_chroma(embedded)
 
         for chunk in chunks:
-            session.add(Chunk(document_id=document_id, chunk_index=chunk.chunk_index, text=chunk.text,
-                    page_number=chunk.page_number, section_header=chunk.section_header, chroma_id=f"{document_id}_{chunk.chunk_index}"))
+            session.add(
+                Chunk(
+                    document_id=document_id,
+                    chunk_index=chunk.chunk_index,
+                    text=chunk.text,
+                    page_number=chunk.page_number,
+                    section_header=chunk.section_header,
+                    chroma_id=f"{document_id}_{chunk.chunk_index}",
+                )
+            )
 
         doc.status = DocumentStatus.ready
         doc.num_chunks = len(chunks)

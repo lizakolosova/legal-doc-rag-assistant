@@ -42,9 +42,8 @@ async def _get_session() -> AsyncSession:
 
 
 @router.post("/run", response_model=EvalRunSummaryResponse)
-async def trigger_evaluation(
-    session: AsyncSession = Depends(_get_session),
-) -> EvalRunSummaryResponse:
+async def trigger_evaluation(session: AsyncSession = Depends(_get_session)) -> EvalRunSummaryResponse:
+    """Trigger an evaluation run over the golden dataset and return the summary."""
     await run_evaluation(session)
 
     stmt = select(EvaluationRun).order_by(EvaluationRun.created_at.desc()).limit(1)
@@ -65,6 +64,7 @@ async def trigger_evaluation(
 async def list_evaluation_runs(
     session: AsyncSession = Depends(_get_session),
 ) -> EvalRunListResponse:
+    """Return all stored evaluation runs ordered by creation time descending."""
     stmt = select(EvaluationRun).order_by(EvaluationRun.created_at.desc())
     rows = (await session.execute(stmt)).scalars().all()
 
@@ -85,6 +85,7 @@ async def get_evaluation_run(
     run_id: uuid.UUID,
     session: AsyncSession = Depends(_get_session),
 ) -> EvalRunDetailResponse:
+    """Return the full detail of a single evaluation run including per-question results."""
     stmt = select(EvaluationRun).where(EvaluationRun.id == run_id)
     row = (await session.execute(stmt)).scalar_one_or_none()
     if row is None:

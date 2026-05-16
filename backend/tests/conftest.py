@@ -1,5 +1,5 @@
 import os
-os.environ.setdefault("OPENAI_API_KEY", "sk-test-key")
+os.environ.setdefault("GEMINI_API_KEY", "test-gemini-key")
 os.environ.setdefault("POSTGRES_URL", "postgresql+asyncpg://test:test@localhost:5432/test")
 
 from pathlib import Path
@@ -9,7 +9,7 @@ import fitz
 import pytest
 from docx import Document
 
-from backend.app.models.schemas import ParsedSection
+from app.models.schemas import ParsedSection
 
 @pytest.fixture()
 def pdf_two_pages(tmp_path: Path) -> Path:

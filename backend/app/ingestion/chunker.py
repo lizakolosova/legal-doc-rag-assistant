@@ -10,6 +10,16 @@ logger = logging.getLogger(__name__)
 
 
 def chunk_sections(sections: list[ParsedSection], chunk_size: int | None = None, chunk_overlap: int | None = None) -> list[TextChunk]:
+    """Split ParsedSections into fixed-size TextChunks using LangChain's text splitter.
+
+    Args:
+        sections: Sections produced by the parser.
+        chunk_size: Token target per chunk; defaults to settings.chunk_size.
+        chunk_overlap: Overlap between consecutive chunks; defaults to settings.chunk_overlap.
+
+    Returns:
+        Flat list of TextChunk objects with sequential chunk_index values.
+    """
     if not sections: return []
 
     start = time.monotonic()

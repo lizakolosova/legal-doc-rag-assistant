@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import time
 from pathlib import Path
@@ -20,26 +21,49 @@ from app.retrieval.reranker import rerank
 logger = logging.getLogger(__name__)
 
 
-async def _evaluate_single(  qa: GoldenQA,session: AsyncSession) -> EvalResult:
+async def _evaluate_single(qa: GoldenQA, session: AsyncSession) -> EvalResult:
     start = time.monotonic()
 
-    raw_results = await hybrid_search(qa.question,session, top_k=settings.retrieval_top_k)
+    raw_results = await hybrid_search(qa.question, session, top_k=settings.retrieval_top_k)
     chunks = rerank(qa.question, raw_results, top_k=settings.rerank_top_k)
 
-    messages = build_messages(qa.question, chunks)
-    answer = await generate_answer(messages, stream=False)
+    retrieval_metrics = compute_retrieval_metrics(qa, chunks)
+
+    answer: str = ""
+    ragas_metrics: dict = {"faithfulness": None, "answer_relevancy": None}
+    try:
+        messages = build_messages(qa.question, chunks)
+        answer = await generate_answer(messages, stream=False)
+        ragas_metrics = await asyncio.to_thread(compute_ragas_metrics, qa.question, answer, chunks)
+    except Exception as exc:
+        logger.warning("Generation/RAGAS failed for question '%s', retrieval metrics still recorded: %s", qa.id, exc)
 
     latency_ms = (time.monotonic() - start) * 1000
 
-    retrieval_metrics = compute_retrieval_metrics(qa, chunks)
-    ragas_metrics = compute_ragas_metrics(qa.question, answer, chunks)
+    return EvalResult(
+        question_id=qa.id, question=qa.question, expected_answer=qa.expected_answer,
+        generated_answer=answer, retrieved_chunks=chunks,
+        context_precision=retrieval_metrics["context_precision"],
+        context_recall=retrieval_metrics["context_recall"],
+        faithfulness=ragas_metrics["faithfulness"],
+        answer_relevancy=ragas_metrics["answer_relevancy"],
+        latency_ms=latency_ms,
+    )
 
-    return EvalResult( question_id=qa.id, question=qa.question, expected_answer=qa.expected_answer,
-        generated_answer=answer, retrieved_chunks=chunks, context_precision=retrieval_metrics["context_precision"],
-        context_recall=retrieval_metrics["context_recall"], faithfulness=ragas_metrics["faithfulness"],
-        answer_relevancy=ragas_metrics["answer_relevancy"], latency_ms=latency_ms)
+async def run_evaluation(session: AsyncSession, golden_path: Path | None = None) -> list[EvalResult]:
+    """Run the full evaluation pipeline over the golden dataset and persist results.
 
-async def run_evaluation(session: AsyncSession,golden_path: Path | None = None) -> list[EvalResult]:
+    For each question in the dataset: retrieves chunks, generates an answer, computes
+    heuristic retrieval metrics and RAGAS generation metrics. Aggregates a summary and
+    stores an EvaluationRun row in Postgres.
+
+    Args:
+        session: Active async SQLAlchemy session.
+        golden_path: Path to a golden dataset JSON; defaults to the bundled file.
+
+    Returns:
+        List of EvalResult objects, one per successfully evaluated question.
+    """
     golden = load_golden_dataset(golden_path)
     logger.info("Starting evaluation run over %d questions", len(golden))
 
@@ -69,7 +93,7 @@ async def run_evaluation(session: AsyncSession,golden_path: Path | None = None) 
     config: dict = {
         "top_k": settings.rerank_top_k,
         "chunk_size": settings.chunk_size,
-        "model": settings.openai_model,
+        "model": settings.gemini_model,
     }
 
     eval_run = EvaluationRun(

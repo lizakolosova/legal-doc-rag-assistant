@@ -1,7 +1,6 @@
 import logging
 import time
-
-import openai
+from typing import Any
 
 from app.config import settings
 from app.exceptions import RetrievalError
@@ -9,7 +8,15 @@ from app.models.schemas import RetrievedChunk
 
 logger = logging.getLogger(__name__)
 
-_COLLECTION_NAME = "documents"
+_embed_model: Any = None
+
+
+def _get_embed_model() -> Any:
+    global _embed_model
+    if _embed_model is None:
+        from sentence_transformers import SentenceTransformer
+        _embed_model = SentenceTransformer("all-MiniLM-L6-v2")
+    return _embed_model
 
 
 async def vector_search(
@@ -17,19 +24,27 @@ async def vector_search(
     top_k: int | None = None,
     document_ids: list[str] | None = None,
 ) -> list[RetrievedChunk]:
+    """Embed the query and retrieve the nearest chunks from ChromaDB.
+
+    Args:
+        query: Natural-language question to embed and search.
+        top_k: Number of results to return; defaults to settings.retrieval_top_k.
+        document_ids: If set, restricts search to these document IDs.
+
+    Returns:
+        Retrieved chunks sorted by cosine similarity descending.
+
+    Raises:
+        RetrievalError: On embedding failure or ChromaDB query failure.
+    """
     k = top_k if top_k is not None else settings.retrieval_top_k
     start = time.monotonic()
 
-    client = openai.AsyncOpenAI(api_key=settings.openai_api_key)
     try:
-        response = await client.embeddings.create(
-            model=settings.embedding_model,
-            input=[query],
-        )
-    except openai.OpenAIError as exc:
+        model = _get_embed_model()
+        query_embedding: list[float] = model.encode([query])[0].tolist()
+    except Exception as exc:
         raise RetrievalError(str(exc)) from exc
-
-    query_embedding: list[float] = response.data[0].embedding
 
     where_filter: dict | None = None
     if document_ids:
@@ -44,7 +59,7 @@ async def vector_search(
         chroma_client = await chromadb.AsyncHttpClient(
             host=settings.chroma_host, port=settings.chroma_port
         )
-        collection = await chroma_client.get_or_create_collection(_COLLECTION_NAME)
+        collection = await chroma_client.get_or_create_collection(settings.chroma_collection)
 
         query_kwargs: dict = {
             "query_embeddings": [query_embedding],

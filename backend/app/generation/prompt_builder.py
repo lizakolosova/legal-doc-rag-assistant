@@ -20,7 +20,20 @@ _NO_CONTEXT_USER = (
 )
 
 
-def build_messages(question: str, chunks: list[RetrievedChunk],) -> list[dict]:
+def build_messages(question: str, chunks: list[RetrievedChunk]) -> list[dict]:
+    """Build the system + user message list for the LLM.
+
+    Each chunk is numbered and included as an inline context block. Long chunks
+    are truncated to _CHUNK_MAX_CHARS. If no chunks are provided, a no-context
+    fallback message is returned.
+
+    Args:
+        question: The user's question.
+        chunks: Retrieved chunks to include as context.
+
+    Returns:
+        Two-element list: [system message, user message].
+    """
     if not chunks:
         return [
             {"role": "system", "content": _SYSTEM_PROMPT},
@@ -46,6 +59,14 @@ def build_messages(question: str, chunks: list[RetrievedChunk],) -> list[dict]:
 
 
 def extract_citations(chunks: list[RetrievedChunk]) -> list[Citation]:
+    """Convert retrieved chunks to Citation objects with 1-based indices.
+
+    Args:
+        chunks: Chunks passed to the LLM; index order must match build_messages.
+
+    Returns:
+        List of Citation objects aligned with the [1], [2], … markers in the answer.
+    """
     return [
         Citation(
             index=i,

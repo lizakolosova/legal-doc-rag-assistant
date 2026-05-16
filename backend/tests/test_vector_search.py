@@ -4,20 +4,17 @@ from uuid import uuid4
 
 import pytest
 
-from  backend.app.config import settings
-from  backend.app.exceptions import RetrievalError
-from  backend.app.models.schemas import RetrievedChunk
-from  backend.app.retrieval.vector_search import vector_search
+from app.config import settings
+from app.exceptions import RetrievalError
+from app.models.schemas import RetrievedChunk
+from app.retrieval.vector_search import vector_search
 
 
-def _make_openai_mock() -> tuple[MagicMock, AsyncMock]:
-    mock_create = AsyncMock(
-        return_value=MagicMock(data=[MagicMock(embedding=[0.1] * 1536)])
-    )
-    mock_client = MagicMock()
-    mock_client.embeddings.create = mock_create
-    mock_openai_cls = MagicMock(return_value=mock_client)
-    return mock_openai_cls, mock_create
+def _make_embed_mock() -> MagicMock:
+    mock_model = MagicMock()
+    # model.encode([query])[0].tolist() → [0.1] * 384
+    mock_model.encode.return_value.__getitem__.return_value.tolist.return_value = [0.1] * 384
+    return mock_model
 
 
 def _make_chroma_mock(
@@ -59,7 +56,7 @@ def _sample_metadatas(doc_id: str, count: int) -> list[dict]:
 
 async def test_vector_search_returns_ranked_results() -> None:
     doc_id = str(uuid4())
-    mock_openai_cls, _ = _make_openai_mock()
+    mock_embed = _make_embed_mock()
     mock_chromadb, _ = _make_chroma_mock(
         ids=["doc_0", "doc_1", "doc_2"],
         documents=["text A", "text B", "text C"],
@@ -67,7 +64,7 @@ async def test_vector_search_returns_ranked_results() -> None:
         distances=[0.1, 0.5, 0.9],
     )
 
-    with patch("app.retrieval.vector_search.openai.AsyncOpenAI", mock_openai_cls):
+    with patch("app.retrieval.vector_search._get_embed_model", return_value=mock_embed):
         with patch.dict(sys.modules, {"chromadb": mock_chromadb}):
             results = await vector_search("what is the indemnity clause?", top_k=3)
 
@@ -80,7 +77,7 @@ async def test_vector_search_returns_ranked_results() -> None:
 
 async def test_vector_search_filters_by_document_id() -> None:
     doc_id = str(uuid4())
-    mock_openai_cls, _ = _make_openai_mock()
+    mock_embed = _make_embed_mock()
     mock_chromadb, mock_collection = _make_chroma_mock(
         ids=["doc_0"],
         documents=["relevant text"],
@@ -95,7 +92,7 @@ async def test_vector_search_filters_by_document_id() -> None:
         distances=[0.2],
     )
 
-    with patch("app.retrieval.vector_search.openai.AsyncOpenAI", mock_openai_cls):
+    with patch("app.retrieval.vector_search._get_embed_model", return_value=mock_embed):
         with patch.dict(sys.modules, {"chromadb": mock_chromadb}):
             results = await vector_search("indemnity", top_k=5, document_ids=[doc_id])
 
@@ -105,7 +102,7 @@ async def test_vector_search_filters_by_document_id() -> None:
 
 
 async def test_vector_search_empty_collection_returns_empty() -> None:
-    mock_openai_cls, _ = _make_openai_mock()
+    mock_embed = _make_embed_mock()
     mock_chromadb, _ = _make_chroma_mock(
         ids=[],
         documents=[],
@@ -113,7 +110,7 @@ async def test_vector_search_empty_collection_returns_empty() -> None:
         distances=[],
     )
 
-    with patch("app.retrieval.vector_search.openai.AsyncOpenAI", mock_openai_cls):
+    with patch("app.retrieval.vector_search._get_embed_model", return_value=mock_embed):
         with patch.dict(sys.modules, {"chromadb": mock_chromadb}):
             results = await vector_search("anything", top_k=10)
 
@@ -121,11 +118,11 @@ async def test_vector_search_empty_collection_returns_empty() -> None:
 
 
 async def test_vector_search_raises_on_chroma_failure() -> None:
-    mock_openai_cls, _ = _make_openai_mock()
+    mock_embed = _make_embed_mock()
     mock_chromadb, mock_collection = _make_chroma_mock([], [], [], [])
     mock_collection.query.side_effect = Exception("connection refused")
 
-    with patch("app.retrieval.vector_search.openai.AsyncOpenAI", mock_openai_cls):
+    with patch("app.retrieval.vector_search._get_embed_model", return_value=mock_embed):
         with patch.dict(sys.modules, {"chromadb": mock_chromadb}):
             with pytest.raises(RetrievalError, match="connection refused"):
                 await vector_search("anything", top_k=5)
@@ -133,7 +130,7 @@ async def test_vector_search_raises_on_chroma_failure() -> None:
 
 async def test_vector_search_defaults_to_settings_top_k() -> None:
     doc_id = str(uuid4())
-    mock_openai_cls, _ = _make_openai_mock()
+    mock_embed = _make_embed_mock()
     mock_chromadb, mock_collection = _make_chroma_mock(
         ids=["doc_0"],
         documents=["text"],
@@ -148,7 +145,7 @@ async def test_vector_search_defaults_to_settings_top_k() -> None:
         distances=[0.3],
     )
 
-    with patch("app.retrieval.vector_search.openai.AsyncOpenAI", mock_openai_cls):
+    with patch("app.retrieval.vector_search._get_embed_model", return_value=mock_embed):
         with patch.dict(sys.modules, {"chromadb": mock_chromadb}):
             await vector_search("test query")
 

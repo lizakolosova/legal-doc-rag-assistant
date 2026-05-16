@@ -5,15 +5,17 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
-os.environ.setdefault("OPENAI_API_KEY", "sk-test-key")
+os.environ.setdefault("GEMINI_API_KEY", "test-gemini-key")
 os.environ.setdefault("POSTGRES_URL", "postgresql+asyncpg://test:test@localhost:5432/test")
 
 import pytest
 
-from backend.app.evaluation.eval_dataset import GoldenQA, _DEFAULT_PATH, load_golden_dataset
-from backend.app.evaluation.metrics import compute_ragas_metrics, compute_retrieval_metrics
-from backend.app.models.schemas import RetrievedChunk
-from backend.app.evaluation.run_eval import run_evaluation
+from app.evaluation.eval_dataset import GoldenQA, load_golden_dataset
+
+_GOLDEN_PATH = Path(__file__).resolve().parents[2] / "eval_data" / "legal_qa_golden.json"
+from app.evaluation.metrics import compute_ragas_metrics, compute_retrieval_metrics
+from app.models.schemas import RetrievedChunk
+from app.evaluation.run_eval import run_evaluation
 
 def _make_golden_qa(id: str = "q1",question: str = "What is the notice period?",expected_answer: str = "30 days.",
     relevant_sources: list[dict] | None = None) -> GoldenQA:
@@ -25,7 +27,7 @@ def _make_chunk(source_file: str = "contract.pdf",page_number: int = 4,text: str
         page_number=page_number, section_header=None)
 
 def test_load_golden_dataset_returns_correct_count() -> None:
-    dataset = load_golden_dataset(_DEFAULT_PATH)
+    dataset = load_golden_dataset(_GOLDEN_PATH)
     assert len(dataset) == 5
     assert all(isinstance(q, GoldenQA) for q in dataset)
 

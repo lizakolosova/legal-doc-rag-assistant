@@ -7,9 +7,9 @@ import fitz
 import pytest
 from docx import Document
 
-from backend.app.exceptions import DocumentParseError, DocumentTooLargeError, UnsupportedFormatError
-from backend.app.ingestion.parser import parse_document, parse_docx, parse_pdf
-import backend.app.ingestion.parser as parser_module
+from app.exceptions import DocumentParseError, DocumentTooLargeError, UnsupportedFormatError
+from app.ingestion.parser import parse_document, parse_docx, parse_pdf
+import app.ingestion.parser as parser_module
 
 def test_parse_pdf_extracts_text(pdf_two_pages: Path, document_id: UUID) -> None:
     sections = parse_pdf(pdf_two_pages, document_id)
